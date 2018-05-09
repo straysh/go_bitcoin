@@ -1,4 +1,4 @@
-package main
+package address
 
 import (
 	"github.com/straysh/btcd/chaincfg"

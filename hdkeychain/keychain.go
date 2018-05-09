@@ -6,8 +6,8 @@ import (
 	"strings"
 	"errors"
 	"strconv"
-	"github.com/straysh/btcutil"
 	"encoding/hex"
+	"github.com/straysh/go_bitcoin/address"
 )
 
 type keypairs struct {
@@ -45,9 +45,7 @@ func parsePaths(path string) ([]uint32, error) {
 // seed 512 bits or 64 bytes
 func FromSeed(seed []byte, network *chaincfg.Params) (*keypairs, error) {
 	masterNode,err := hdkeychain.NewMaster(seed, network)
-	if err!=nil {
-		return nil, err
-	}
+	if err!=nil { return nil, err }
 
 	keypair := &keypairs{}
 	keypair.masterNode = masterNode
@@ -58,6 +56,16 @@ func FromSeedHex(seedHex string, network *chaincfg.Params) (*keypairs, error) {
 	seed,err := hex.DecodeString(seedHex)
 	if err!=nil { return nil, err }
 	return FromSeed(seed, network)
+}
+
+func FromString(key string, network *chaincfg.Params) (*keypairs, error) {
+	masterNode,err := hdkeychain.NewKeyFromString(key)
+	if err!=nil { return nil, err }
+
+	keypair := &keypairs{}
+	keypair.node = masterNode
+	keypair.network = network
+	return keypair, nil
 }
 
 // strict BIP44 protocol
@@ -84,6 +92,8 @@ func (keypair *keypairs) getAccountNode(paths []uint32) (*hdkeychain.ExtendedKey
 	return node, nil
 }
 
-func (keypair *keypairs) Address(index int, isChange bool) (btcutil.Address, error) {
-	return keypair.node.Address(keypair.network)
+func (keypair *keypairs) Address(index int, isChange bool) (*address.Address, error) {
+	addr,err := keypair.node.Address(keypair.network)
+	if err!=nil { return nil, err }
+	return &address.Address{Address: addr}, nil
 }
