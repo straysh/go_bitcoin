@@ -1,6 +1,14 @@
-mnemonic → privkey → pubkey → address
+# Goals:
+1. 
+```
+      mnemonic
+         ↓
+wif ↔ privkey → pubkey  
+         ↓
+      address
+```
 
-new Transaction()  
+2. new Transaction()  
 ->from(utxos)  
 ->to(address)  
 ->change(address)  

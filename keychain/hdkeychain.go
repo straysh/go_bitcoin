@@ -1,4 +1,4 @@
-package hdkeychain
+package keychain
 
 import (
 	"github.com/straysh/btcutil/hdkeychain"
@@ -8,22 +8,26 @@ import (
 	"strconv"
 	"encoding/hex"
 	"github.com/straysh/go_bitcoin/address"
+	"github.com/straysh/btcutil"
 )
 
 type keypairs struct {
 	masterNode *hdkeychain.ExtendedKey
 	accountNode *hdkeychain.ExtendedKey
+	index int
+	isChange bool
+	wif *btcutil.WIF
 	node *hdkeychain.ExtendedKey
 	network *chaincfg.Params
 }
 
-func parsePaths(path string) ([]uint32, error) {
+func parsePaths(path string) ([]int, error) {
 	paths := strings.Split(path, "/")
 	if paths[0]!="m" && paths[0]!="M" {
 		return nil, errors.New("path should leadingg with m or M")
 	}
 
-	var results [5]uint32
+	var results [5]int
 	for p,seg := range paths[1:] {
 		isHarden := false
 		if l:=len(seg); seg[l-1:] == "'" {
@@ -36,7 +40,7 @@ func parsePaths(path string) ([]uint32, error) {
 			index += hdkeychain.HardenedKeyStart
 		}
 
-		results[p] = uint32(index)
+		results[p] = int(index)
 	}
 
 	return results[:], nil
@@ -63,7 +67,7 @@ func FromString(key string, network *chaincfg.Params) (*keypairs, error) {
 	if err!=nil { return nil, err }
 
 	keypair := &keypairs{}
-	keypair.node = masterNode
+	keypair.masterNode = masterNode
 	keypair.network = network
 	return keypair, nil
 }
@@ -74,12 +78,14 @@ func (keypair *keypairs) DerivePath(path string) (*keypairs, error) {
 	paths,_ := parsePaths(path)
 	node,_ := keypair.getAccountNode(paths[:3])
 
-	node,_ = node.Child(paths[3])
-	node,_ = node.Child(paths[4])
+	node,_ = node.Child( uint32(paths[3]) )
+	node,_ = node.Child( uint32(paths[4]) )
 	keypair.node = node
+	keypair.index = paths[3]
+	keypair.isChange = false;if paths[4]==1 {keypair.isChange=true}
 	return keypair, nil
 }
-func (keypair *keypairs) getAccountNode(paths []uint32) (*hdkeychain.ExtendedKey, error) {
+func (keypair *keypairs) getAccountNode(paths []int) (*hdkeychain.ExtendedKey, error) {
 	var node *hdkeychain.ExtendedKey
 	if keypair.accountNode == nil {
 		node,_ = keypair.masterNode.Child(hdkeychain.HardenedKeyStart + 44)
@@ -93,7 +99,27 @@ func (keypair *keypairs) getAccountNode(paths []uint32) (*hdkeychain.ExtendedKey
 }
 
 func (keypair *keypairs) Address(index int, isChange bool) (*address.Address, error) {
-	addr,err := keypair.node.Address(keypair.network)
-	if err!=nil { return nil, err }
-	return &address.Address{Address: addr}, nil
+	if keypair.node != nil {
+		if keypair.accountNode!=nil && (keypair.index!=index || keypair.isChange!=isChange) {
+			change := uint32(0);if isChange {change = uint32(1)}
+			node,_ := keypair.accountNode.Child(change)
+			node,_ = node.Child(uint32(index))
+			keypair.node = node
+			keypair.index = index
+			keypair.isChange = isChange
+			addr,err := keypair.node.Address(keypair.network)
+			if err!=nil { return nil, err }
+			return &address.Address{Address: addr}, nil
+		} else {
+			addr,err := keypair.node.Address(keypair.network)
+			if err!=nil { return nil, err }
+			return &address.Address{Address: addr}, nil
+		}
+	} else if keypair.masterNode!=nil {
+		addr,err := keypair.masterNode.Address(keypair.network)
+		if err!=nil { return nil, err }
+		return &address.Address{Address: addr}, nil
+	} else {
+		return nil, errors.New("uninitiated keypair")
+	}
 }
