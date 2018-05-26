@@ -4,10 +4,10 @@ import (
 	"github.com/straysh/btcd/btcec"
 	"encoding/hex"
 	"github.com/straysh/btcd/chaincfg"
-	"github.com/straysh/go_bitcoin/address"
 	"github.com/straysh/btcutil"
 	"math/big"
 	"errors"
+	"crypto/sha256"
 )
 
 const (
@@ -79,11 +79,37 @@ func (pub *PublicKey) String() string {
 	return pubHex
 }
 
-func (pub *PublicKey) Address() (*address.Address, error) {
+func (pub *PublicKey) Address() (*btcutil.AddressPubKeyHash, error) {
 	pkHash := btcutil.Hash160(pub.SerializeCompressed())
 	addr,err := btcutil.NewAddressPubKeyHash(pkHash, pub.Network)
 	if err!=nil { return nil, err }
-	return &address.Address{Address: addr}, nil
+	return addr, nil
+}
+
+func (pub *PublicKey) AddressP2PKH() (*btcutil.AddressPubKeyHash, error) {
+	return pub.Address()
+}
+
+func (pub *PublicKey) AddressP2SH() (*btcutil.AddressScriptHash, error) {
+	pkHash := pub.SerializeCompressed()
+	addr,err := btcutil.NewAddressScriptHash(pkHash, pub.Network)
+	if err!=nil { return nil, err }
+	return addr, nil
+}
+
+func (pub *PublicKey) AddressP2WPKH() (*btcutil.AddressWitnessPubKeyHash, error) {
+	pkHash := btcutil.Hash160(pub.SerializeCompressed())
+	addr,err := btcutil.NewAddressWitnessPubKeyHash(pkHash, pub.Network)
+	if err!=nil { return nil, err }
+	return addr, nil
+}
+
+func (pub *PublicKey) AddressP2WSH() (*btcutil.AddressWitnessScriptHash, error) {
+	//redeemScript := btcutil.Hash160(pub.SerializeCompressed())
+	pkHash := sha256.Sum256(pub.SerializeCompressed())
+	addr,err := btcutil.NewAddressWitnessScriptHash(pkHash[:], pub.Network)
+	if err!=nil { return nil, err }
+	return addr, nil
 }
 
 func isOdd(a *big.Int) bool {
@@ -98,8 +124,11 @@ func isOdd(a *big.Int) bool {
 // https://bitcoin.stackexchange.com/questions/38740/bitcoin-how-to-get-x-value-from-y
 // https://bitcoin.stackexchange.com/questions/25024/how-do-you-get-a-bitcoin-public-key-from-a-private-key?rq=1
 func fromX(x *big.Int, odd bool) *big.Int {
-	B,_ := new(big.Int).SetString("0000000000000000000000000000000000000000000000000000000000000007", 16)
-	P,_ := new(big.Int).SetString("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F", 16)
+	//B,_ := new(big.Int).SetString("0000000000000000000000000000000000000000000000000000000000000007", 16)
+	//P,_ := new(big.Int).SetString("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F", 16)
+	curve := btcec.S256()
+	B := curve.B
+	P := curve.P;
 	x1 := new(big.Int).Mul(x, x)
 	x1.Mul(x1, x)
 	x1.Add(x1, B)

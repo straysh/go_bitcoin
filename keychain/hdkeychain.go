@@ -7,18 +7,16 @@ import (
 	"errors"
 	"strconv"
 	"encoding/hex"
-	"github.com/straysh/go_bitcoin/address"
 	"github.com/straysh/btcutil"
 )
 
 type keypairs struct {
-	masterNode *hdkeychain.ExtendedKey
-	accountNode *hdkeychain.ExtendedKey
-	index int
-	isChange bool
+	masterNode *hdkeychain.ExtendedKey  // root node
 	wif *btcutil.WIF
-	node *hdkeychain.ExtendedKey
+	node *hdkeychain.ExtendedKey // address node
 	network *chaincfg.Params
+	privKey *PrivateKey
+	pubKey *PublicKey
 }
 
 func parsePaths(path string) ([]int, error) {
@@ -63,11 +61,11 @@ func FromSeedHex(seedHex string, network *chaincfg.Params) (*keypairs, error) {
 }
 
 func FromString(key string, network *chaincfg.Params) (*keypairs, error) {
-	masterNode,err := hdkeychain.NewKeyFromString(key)
+	node,err := hdkeychain.NewKeyFromString(key)
 	if err!=nil { return nil, err }
 
 	keypair := &keypairs{}
-	keypair.masterNode = masterNode
+	keypair.node = node
 	keypair.network = network
 	return keypair, nil
 }
@@ -76,50 +74,39 @@ func FromString(key string, network *chaincfg.Params) (*keypairs, error) {
 func (keypair *keypairs) DerivePath(path string) (*keypairs, error) {
 	// m/44'/1'/0'/0/0
 	paths,_ := parsePaths(path)
-	node,_ := keypair.getAccountNode(paths[:3])
-
+	node,_ := keypair.masterNode.Child(hdkeychain.HardenedKeyStart + 44)
+	node,_ = node.Child(hdkeychain.HardenedKeyStart + 1)
+	node,_ = node.Child(hdkeychain.HardenedKeyStart + 0)
 	node,_ = node.Child( uint32(paths[3]) )
 	node,_ = node.Child( uint32(paths[4]) )
 	keypair.node = node
-	keypair.index = paths[3]
-	keypair.isChange = false;if paths[4]==1 {keypair.isChange=true}
 	return keypair, nil
 }
-func (keypair *keypairs) getAccountNode(paths []int) (*hdkeychain.ExtendedKey, error) {
-	var node *hdkeychain.ExtendedKey
-	if keypair.accountNode == nil {
-		node,_ = keypair.masterNode.Child(hdkeychain.HardenedKeyStart + 44)
-		node,_ = node.Child(hdkeychain.HardenedKeyStart + 1)
-		node,_ = node.Child(hdkeychain.HardenedKeyStart + 0)
-		keypair.accountNode = node
-	} else {
-		node = keypair.accountNode
+
+func (keypair *keypairs) PrivateKey(network *chaincfg.Params) (*PrivateKey, error) {
+	if keypair.privKey!=nil {
+		return keypair.privKey, nil
 	}
-	return node, nil
+
+	privKey,err := keypair.node.ECPrivKey()
+	if err!=nil { return nil, err}
+	keypair.privKey = &PrivateKey{
+		Network: network,
+		PrivateKey: privKey,
+	}
+	return keypair.privKey, nil
 }
 
-func (keypair *keypairs) Address(index int, isChange bool) (*address.Address, error) {
-	if keypair.node != nil {
-		if keypair.accountNode!=nil && (keypair.index!=index || keypair.isChange!=isChange) {
-			change := uint32(0);if isChange {change = uint32(1)}
-			node,_ := keypair.accountNode.Child(change)
-			node,_ = node.Child(uint32(index))
-			keypair.node = node
-			keypair.index = index
-			keypair.isChange = isChange
-			addr,err := keypair.node.Address(keypair.network)
-			if err!=nil { return nil, err }
-			return &address.Address{Address: addr}, nil
-		} else {
-			addr,err := keypair.node.Address(keypair.network)
-			if err!=nil { return nil, err }
-			return &address.Address{Address: addr}, nil
-		}
-	} else if keypair.masterNode!=nil {
-		addr,err := keypair.masterNode.Address(keypair.network)
-		if err!=nil { return nil, err }
-		return &address.Address{Address: addr}, nil
-	} else {
-		return nil, errors.New("uninitiated keypair")
+func (keypair *keypairs) PublicKey(network *chaincfg.Params) (*PublicKey, error) {
+	if keypair.pubKey!=nil {
+		return keypair.pubKey, nil
 	}
+
+	pubKey, err := keypair.node.ECPubKey()
+	if err!=nil { return nil, err }
+	keypair.pubKey = &PublicKey{
+		Network: network,
+		PublicKey: pubKey,
+	}
+	return keypair.pubKey, nil
 }

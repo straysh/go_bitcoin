@@ -7,8 +7,6 @@ import (
 	"github.com/straysh/btcd/chaincfg/chainhash"
 	"bytes"
 	"errors"
-	"github.com/straysh/go_bitcoin/address"
-	"github.com/straysh/btcutil"
 )
 
 type PrivateKey struct {
@@ -84,14 +82,6 @@ func (priv *PrivateKey) WIF(compressed bool) string {
 	cksum := chainhash.DoubleHashB(a)[:4]
 	a = append(a, cksum...)
 	return base58.Encode(a)
-}
-
-func (priv *PrivateKey) Address() (*address.Address, error) {
-	pubkey := priv.PrivateKey.PubKey()
-	pkHash := btcutil.Hash160(pubkey.SerializeCompressed())
-	addr,err := btcutil.NewAddressPubKeyHash(pkHash, priv.Network)
-	if err!=nil { return nil, err }
-	return &address.Address{Address: addr}, nil
 }
 
 func (priv *PrivateKey) PublicKey() *PublicKey {
